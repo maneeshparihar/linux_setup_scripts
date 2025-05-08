@@ -1,0 +1,185 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------
+# adding user to sudoers 
+# for Debian systems 
+# first add normal user to sudo list 
+su root
+/usr/sbin/usermod -aG sudo maneesh # in debian /usr/sbin is not added into path hence full path is needed
+
+# -------------------------------------------------------------------
+# change time zone to Asia/Kolkata 
+sudo timedatectl set-timezone Asia/Kolkata
+
+# -------------------------------------------------------------------
+# to be able to use apt lists from internet add the following to /etc/apt/sources.list
+# nano /etc/apt/sources.list 
+deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
+
+# -------------------------------------------------------------------
+# modifying network adapters with nmcli 
+nmcli connection show
+nmcli connection modify <connection-name> ipv4.addresses 192.168.1.100/24 ipv4.gateway 192.168.1.1 ipv4.method manual
+nmcli connection modify <connection-name> ipv4.dns "8.8.8.8 8.8.4.4"
+systemctl restart NetworkManager
+nmcli connection show <connection-name> # to check all details of an adapter 
+# even after restarting network manager, the adapter does not release the dhcp in that case 
+nmcli connection down <connection_name> && nmcli connection up <connection_name>
+# this can interrupt ssh connection and the adapter might not come up due to this interruption so ensure alternate connectivity
+
+# -------------------------------------------------------------------
+# installing common utilities 
+sudo apt install zip unzip curl  -y
+
+# -------------------------------------------------------------------
+## install docker on debian or ubuntu 
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+
+# on rocky 
+sudo dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+sudo dnf -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo systemctl --now enable docker
+sudo usermod -a -G docker $(whoami)
+
+# -------------------------------------------------------------------
+## install nvm 
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+
+## install node 20 and make it default 
+nvm install 20 
+nvm alias default 20 
+
+# -------------------------------------------------------------------
+## install azure cli 
+## install aws cli 
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+
+# -------------------------------------------------------------------
+## install acme.sh 
+curl https://get.acme.sh | sh -s email=my@example.com
+
+# -------------------------------------------------------------------
+# installing open ssh server 
+
+sudo apt update
+sudo apt install openssh-server
+sudo systemctl start ssh
+sudo systemctl enable ssh
+# sudo ufw status
+# sudo ufw allow ssh
+
+# For connecting to server 
+ssh username@server_ip_address
+
+# -------------------------------------------------------------------
+# SETUP CRON for taking db backup 
+
+crontab -l # for listing crontab 
+crontab -e # for editing crontab
+# add first line as MAILTO for email msgs (WIP)
+MAILTO="maneesh@gdmcjodhpur.org"
+# for running at night 1 AM 
+0 1 * * * /home/ubuntu/code/lis-crt/docker-config/lips-docker/shell-files/db-bkp-external.sh  
+# for running at 6.30 PM and not outputting msgs anywhere (WIP for email of error msgs)
+30 18 * * *  /home/ubuntu/code/lis-crt/docker-config/gd-docker/shell-files/db-bkp-external.sh > /dev/null
+
+# -------------------------------------------------------------------
+# SETUP CRON for running shell files on reboots 
+# similarly we can add more shell files which have absolute context in crontab, so that they start with reboots 
+adding shell files to crontab 
+crontab -l 
+crontab -e
+@reboot sleep 10 && /home/maneesh/code/lis-crt/docker-config/docker-common/shell-files/run-httpd-reverse-proxy.sh
+@reboot sleep 10 && /home/maneesh/code/lis-crt/docker-config/docker-common/shell-files/run-dns-unbound.sh
+
+
+# -------------------------------------------------------------------
+# installing avahi for multicast DNS and referring to machine with only host name 
+
+# set hostname 
+hostnamectl
+sudo hostnamectl set-hostname myvm.local
+
+# install avahi for multicast dns (mdns); this will help ssh using just hostname rather than fixed ip address 
+sudo dnf install -y avahi avahi-tools nss-mdns
+sudo systemctl enable --now avahi-daemon
+systemctl status avahi-daemon
+
+
+# -------------------------------------------------------------------
+# mounting windows share into the VM permanently 
+
+
+sudo dnf install -y cifs-utils
+sudo mkdir -p /mnt/windows_share
+sudo mount -t cifs //WINDOWS_IP/ShareName /mnt/windows_share -o username=YourWindowsUsername,password=YourWindowsPassword,vers=3.0
+sudo nano /etc/fstab
+# ---------
+touch /etc/smb_credentials
+vim /etc/smb_credentials
+username=YourWindowsUsername
+password=YourWindowsPassword
+domain=WORKGROUP
+# ---------
+//WINDOWS_IP/ShareName /mnt/windows_share cifs credentials=/etc/smb_credentials,vers=3.0,uid=1000,gid=1000,nofail 0 0
+
+
+# -------------------------------------------------------------------
+# adding email 
+
+# on ubuntu 
+sudo apt install postfix mailutils -y
+# on Centos 
+sudo yum install postfix mailx -y
+
+sudo systemctl restart postfix
+
+# Edit /etc/postfix/main.cf
+relayhost = [smtp.gmail.com]:587
+smtp_sasl_auth_enable = yes
+smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+smtp_sasl_security_options = noanonymous
+smtp_tls_security_level = encrypt
+smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
+
+# create sasl passwd 
+# /etc/postfix/sasl_passwd
+[smtp.gmail.com]:587 your-email@gmail.com:your-password
+
+# secure it 
+sudo chmod 600 /etc/postfix/sasl_passwd
+sudo postmap /etc/postfix/sasl_passwd
+
+sudo systemctl restart postfix
+
+echo "Cron job test email" | mail -s "Test Email" your-email@example.com
+
+
+# -------------------------------------------------------------------
+# Adding SWAP file to a VM 
+
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+sudo swapon --show
+free -h
+
+# changing swappiness 
+cat /proc/sys/vm/swappiness
+sudo sysctl vm.swappiness=10
+# to make it permanent add to following file /etc/sysctl.conf run following command 
+echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
+
+
+
+
+
+
