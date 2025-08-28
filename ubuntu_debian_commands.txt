@@ -189,6 +189,13 @@ flatpak install flathub com.sublimetext.three
 flatpak install flathub com.visualstudio.code
 
 
+# -------------------------------------------------------------------
+# Adding Snapd to non ubuntu distros 
+
+
+sudo apt install snapd
+sudo snap install code --classic
+sudo snap install sublime-text --classic
 
 
 
