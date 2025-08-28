@@ -179,6 +179,19 @@ sudo sysctl vm.swappiness=10
 echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
 
 
+# -------------------------------------------------------------------
+# Adding Flatpak
+sudo apt install -y flatpak
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak remotes
+
+flatpak install flathub com.sublimetext.three
+flatpak install flathub com.visualstudio.code
+
+
+
+
+
 
 
 
